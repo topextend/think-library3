@@ -44,10 +44,18 @@ class NodeService extends Service
      */
     public function getCurrent(string $type = ''): string
     {
-        $prefix = $this->app->getNamespace();
-        $middle = '\\' . $this->nameTolower($this->app->request->controller());
-        $suffix = ($type === 'controller') ? '' : ('\\' . $this->app->request->action());
-        return strtolower(strtr(substr($prefix, stripos($prefix, '\\') + 1) . $middle . $suffix, '\\', '/'));
+        $space = $this->app->getNamespace();
+        $prefix = strtolower($this->app->http->getName());
+        if (preg_match("|\\\\addons\\\\{$prefix}$|", $space)) {
+            $prefix = "addons-{$prefix}";
+        }
+        // 获取应用前缀节点
+        if ($type === 'module') return $prefix;
+        // 获取控制器前缀节点
+        $middle = $this->nameTolower($this->app->request->controller());
+        if ($type === 'controller') return $prefix . '/' . $middle;
+        // 获取完整的权限节点
+        return $prefix . '/' . $middle . '/' . strtolower($this->app->request->action());
     }
 
     /**
@@ -57,13 +65,17 @@ class NodeService extends Service
      */
     public function fullnode(?string $node = ''): string
     {
-        if (empty($node)) return $this->getCurrent();
-        if (count($attrs = explode('/', $node)) === 1) {
-            return $this->getCurrent('controller') . '/' . strtolower($node);
-        } else {
-            $attrs[1] = $this->nameTolower($attrs[1]);
-            return strtolower(join('/', $attrs));
+        if (empty($node)) {
+            return $this->getCurrent();
         }
+        switch (count($attrs = explode('/', $node))) {
+            case 2:
+                return $this->getCurrent('module') . '/' . strtolower($node);
+            case 1:
+                return $this->getCurrent('controller') . '/' . strtolower($node);
+        }
+        $attrs[1] = $this->nameTolower($attrs[1]);
+        return strtolower(join('/', $attrs));
     }
 
     /**
@@ -100,10 +112,12 @@ class NodeService extends Service
         $ignores = get_class_methods('\think\admin\Controller');
         /*! 扫描所有代码控制器节点，更新节点缓存 */
         foreach ($this->scanDirectory($this->app->getBasePath()) as $file) {
-            if (preg_match("|/(\w+)/(\w+)/controller/(.+)\.php$|i", $file, $matches)) {
+            $name = substr($file, strlen(strtr($this->app->getRootPath(), '\\', '/')) - 1);
+            if (preg_match("|^([\w/]+)/(\w+)/controller/(.+)\.php$|i", $name, $matches)) {
                 [, $namespace, $appname, $classname] = $matches;
+                $addons = preg_match('|/addons$|', $namespace) ? 'addons-' : '';
                 $class = new \ReflectionClass(strtr("{$namespace}/{$appname}/controller/{$classname}", '/', '\\'));
-                $prefix = strtolower(strtr("{$appname}/{$this->nameTolower($classname)}", '\\', '/'));
+                $prefix = strtolower(strtr("{$addons}{$appname}/{$this->nameTolower($classname)}", '\\', '/'));
                 $data[$prefix] = $this->_parseComment($class->getDocComment() ?: '', $classname);
                 foreach ($class->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
                     if (in_array($metname = $method->getName(), $ignores)) continue;

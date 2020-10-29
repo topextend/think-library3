@@ -17,20 +17,21 @@ declare (strict_types=1);
 namespace think\admin\multiple;
 
 use Closure;
+use think\App;
 use think\exception\HttpException;
 use think\Request;
 use think\Response;
 
 /**
  * 多应用支持组件
- * Class App
+ * Class Multiple
  * @package think\admin\multiple
  */
-class App
+class Multiple
 {
     /**
      * 应用实例
-     * @var \think\App
+     * @var App
      */
     protected $app;
 
@@ -48,9 +49,9 @@ class App
 
     /**
      * App constructor.
-     * @param \think\App $app
+     * @param App $app
      */
-    public function __construct(\think\App $app)
+    public function __construct(App $app)
     {
         $this->app = $app;
         $this->name = $this->app->http->getName();
@@ -93,13 +94,12 @@ class App
             $this->app->http->setBind();
         } else {
             // 自动多应用识别
-            $this->app->http->setBind(false);
             $appName = null;
+            $this->app->http->setBind(false);
             $bind = $this->app->config->get('app.domain_bind', []);
             if (!empty($bind)) {
-                // 获取当前子域名
-                $subDomain = $this->app->request->subDomain();
                 $domain = $this->app->request->host(true);
+                $subDomain = $this->app->request->subDomain();
                 if (isset($bind[$domain])) {
                     $appName = $bind[$domain];
                     $this->app->http->setBind();
@@ -131,15 +131,6 @@ class App
                     $appName = $map['*'];
                 } else {
                     $appName = $name ?: $defaultApp;
-                    $appPath = $this->path ?: $this->app->getBasePath() . $appName . DIRECTORY_SEPARATOR;
-                    if (!is_dir($appPath)) {
-                        if ($this->app->config->get('app.app_express', false)) {
-                            $this->setApp($defaultApp);
-                            return true;
-                        } else {
-                            return false;
-                        }
-                    }
                 }
                 if ($name) {
                     $this->app->request->setRoot('/' . $name);
@@ -172,11 +163,16 @@ class App
      */
     protected function setApp(string $appName): void
     {
-        $this->app->http->name($appName);
-        $appPath = $this->path ?: $this->app->getBasePath() . $appName . DIRECTORY_SEPARATOR;
+        if (stripos($appName, 'addons-') === 0) {
+            [, $appName] = explode('addons-', $appName, 2);
+            $this->app->setNamespace($this->app->config->get('app.app_namespace') ?: "app\\addons\\{$appName}");
+            $appPath = $this->path ?: $this->app->getBasePath() . 'addons' . DIRECTORY_SEPARATOR . $appName . DIRECTORY_SEPARATOR;
+        } else {
+            $appPath = $this->path ?: $this->app->getBasePath() . $appName . DIRECTORY_SEPARATOR;
+            $this->app->setNamespace($this->app->config->get('app.app_namespace') ?: "app\\{$appName}");
+        }
         $this->app->setAppPath($appPath);
-        // 设置应用命名空间
-        $this->app->setNamespace($this->app->config->get('app.app_namespace') ?: 'app\\' . $appName);
+        $this->app->http->name($appName);
         if (is_dir($appPath)) {
             $this->app->setRuntimePath($this->app->getRuntimePath() . $appName . DIRECTORY_SEPARATOR);
             $this->app->http->setRoutePath($this->getRoutePath());

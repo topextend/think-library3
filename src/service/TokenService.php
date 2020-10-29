@@ -78,7 +78,7 @@ class TokenService extends Service
      */
     public function getInputToken(): string
     {
-        return $this->app->request->header('user-form-token', input('_csrf_', ''));
+        return $this->app->request->header('user-form-token') ?: input('_csrf_', '');
     }
 
     /**
