@@ -38,7 +38,7 @@ class Library extends Service
     /**
      * 版本号
      */
-    const VERSION = '6.0.19';
+    const VERSION = '6.0.20';
 
     /**
      * 启动服务
@@ -79,22 +79,23 @@ class Library extends Service
                 $this->app->request->setPathinfo($_SERVER['argv'][1]);
             }
         } else {
-            $isSess = intval($this->app->request->get('not_init_session', '0')) === 0;
-            $notYar = stripos($this->app->request->header('user_agent', ''), 'PHP Yar RPC-') === false;
-            if ($notYar && $isSess) {
+            $issess = intval($this->app->request->get('not_init_session', '0')) === 0;
+            $notapi = stripos($this->app->request->header('user_agent', ''), 'PHP Yar RPC-') === false;
+            if ($notapi && $issess) {
                 // 注册会话初始化中间键
                 $this->app->middleware->add(SessionInit::class);
                 // 注册语言包处理中间键
                 $this->app->middleware->add(LoadLangPack::class);
             }
             // 注册访问处理中间键
-            $this->app->middleware->add(function (Request $request, \Closure $next) {
+            $this->app->middleware->add(function (Request $request, \Closure $next) use ($issess, $notapi) {
                 $header = [];
                 if (($origin = $request->header('origin', '*')) !== '*') {
                     $header['Access-Control-Allow-Origin'] = $origin;
-                    $header['Access-Control-Allow-Methods'] = 'GET,POST,PATCH,PUT,DELETE';
-                    $header['Access-Control-Allow-Headers'] = 'Authorization,Content-Type,If-Match,If-Modified-Since,If-None-Match,If-Unmodified-Since,X-Requested-With';
+                    $header['Access-Control-Allow-Methods'] = 'GET,PUT,POST,PATCH,DELETE';
+                    $header['Access-Control-Allow-Headers'] = 'Authorization,Content-Type,If-Match,If-Modified-Since,If-None-Match,If-Unmodified-Since,X-Requested-With,User-Form-Token,User-Token,Token';
                     $header['Access-Control-Expose-Headers'] = 'User-Form-Token,User-Token,Token';
+                    $header['Access-Control-Allow-Credentials'] = 'true';
                 }
                 // 访问模式及访问权限检查
                 if ($request->isOptions()) {
@@ -108,7 +109,7 @@ class Library extends Service
                 }
             }, 'route');
         }
-        // 动态加入应用初始化系统函数
+        // 动态加载应用初始化系统函数
         [$ds, $base] = [DIRECTORY_SEPARATOR, $this->app->getBasePath()];
         foreach (glob("{$base}*{$ds}sys.php") as $file) includeFile($file);
         // 动态加载插件初始化系统函数
